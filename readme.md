@@ -20,14 +20,18 @@ npm install
 npm start
 Then open: http://localhost:1920
 
-Option 2: One-Command Install (Linux)
-bash
+### Option 2: One-Command Install (Linux)
+
 bash <(curl -s https://raw.githubusercontent.com/shineakhanda4/cave-ddos-shield/main/install.sh)
-📱 Access
+# 📱 Access
 Page	URL
+
 Login	http://localhost:1920/login.html
+
 Dashboard	http://localhost:1920/dashboard.html
+
 Public View	http://localhost:1920/public.html
+
 Default Login:
 
 Username: admin
