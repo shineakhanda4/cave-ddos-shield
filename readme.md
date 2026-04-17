@@ -9,10 +9,9 @@
 
 ### Option 1: Run Locally (Easiest)
 
-```
 # Clone the repository
 git clone https://github.com/shineakhanda4/cave-ddos-shield.git
-cd cave-ddos-shield ```
+cd cave-ddos-shield
 
 # Install dependencies
 npm install
