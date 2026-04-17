@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # =============================================================================
-# Cave DDoS Shield - Simple Installer
+# Cave DDoS Shield - VPS Installer with Public IP Detection
 # =============================================================================
 
 clear
 
 echo "════════════════════════════════════════════════════════════════"
-echo "         🏔️  CAVE DDoS SHIELD - SIMPLE INSTALLER  🏔️"
+echo "         🏔️  CAVE DDoS SHIELD - VPS INSTALLER  🏔️"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 
@@ -15,8 +15,20 @@ echo ""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Detect Public IP
+echo "📌 Step 1: Detecting server IP..."
+PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ipinfo.io/ip 2>/dev/null || curl -s icanhazip.com 2>/dev/null)
+
+if [ -n "$PUBLIC_IP" ]; then
+    echo "   ✅ Public IP: $PUBLIC_IP"
+else
+    PUBLIC_IP="YOUR_SERVER_IP"
+    echo "   ⚠️  Could not detect public IP"
+fi
+
 # Check Node.js
-echo "📌 Step 1: Checking Node.js..."
+echo ""
+echo "📌 Step 2: Checking Node.js..."
 if command -v node &> /dev/null; then
     echo "   ✅ Node.js $(node -v) is installed"
 else
@@ -24,42 +36,28 @@ else
     echo ""
     echo "   Installing Node.js automatically..."
     
-    # Detect OS and install Node.js
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         if [[ "$ID" == "ubuntu" || "$ID" == "debian" ]]; then
-            echo "   📦 Installing Node.js for Ubuntu/Debian..."
             curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - &> /dev/null
             sudo apt-get install -y nodejs &> /dev/null
-            echo "   ✅ Node.js installed!"
         elif [[ "$ID" == "centos" || "$ID" == "rhel" || "$ID" == "fedora" ]]; then
-            echo "   📦 Installing Node.js for CentOS/RHEL/Fedora..."
             curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash - &> /dev/null
             sudo yum install -y nodejs &> /dev/null
-            echo "   ✅ Node.js installed!"
-        elif [[ "$ID" == "arch" || "$ID" == "manjaro" ]]; then
-            echo "   📦 Installing Node.js for Arch..."
-            sudo pacman -S --noconfirm nodejs npm &> /dev/null
-            echo "   ✅ Node.js installed!"
         else
-            echo "   ❌ Could not auto-install. Please install Node.js manually:"
-            echo "      https://nodejs.org/"
+            echo "   ❌ Please install Node.js manually: https://nodejs.org/"
             exit 1
         fi
-    else
-        echo "   ❌ Could not detect OS. Please install Node.js manually:"
-        echo "      https://nodejs.org/"
-        exit 1
     fi
+    echo "   ✅ Node.js installed!"
 fi
 
 echo ""
-echo "📌 Step 2: Installing npm packages..."
+echo "📌 Step 3: Installing dependencies..."
 echo "   This may take a minute..."
 
 # Check if package.json exists
 if [ ! -f "package.json" ]; then
-    echo "   ⚠️  package.json not found. Creating one..."
     cat > package.json << 'EOF'
 {
   "name": "cave-ddos-shield",
@@ -67,8 +65,7 @@ if [ ! -f "package.json" ]; then
   "description": "Advanced DDoS protection system with cave theme",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "node app.js"
+    "start": "node app.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -81,45 +78,43 @@ if [ ! -f "package.json" ]; then
   }
 }
 EOF
-    echo "   ✅ package.json created"
 fi
 
-# Install dependencies
+# Install build tools if needed
+if ! command -v make &> /dev/null; then
+    echo "   Installing build tools..."
+    sudo apt-get update -qq &> /dev/null
+    sudo apt-get install -y build-essential python3 -qq &> /dev/null
+fi
+
 npm install --silent 2>/dev/null
-
-if [ $? -eq 0 ]; then
-    echo "   ✅ Packages installed successfully"
-else
-    echo "   ⚠️  Some packages may need build tools"
-    echo "   Installing build essentials..."
-    
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [[ "$ID" == "ubuntu" || "$ID" == "debian" ]]; then
-            sudo apt-get install -y build-essential python3 &> /dev/null
-        elif [[ "$ID" == "centos" || "$ID" == "rhel" || "$ID" == "fedora" ]]; then
-            sudo yum groupinstall -y "Development Tools" &> /dev/null
-            sudo yum install -y python3 &> /dev/null
-        fi
-    fi
-    
-    # Try again
-    npm install --silent 2>/dev/null
-    echo "   ✅ Packages installed"
-fi
+echo "   ✅ Packages installed"
 
 echo ""
-echo "📌 Step 3: Creating configuration..."
-if [ ! -f ".env" ]; then
-    JWT_SECRET=$(cat /dev/urandom 2>/dev/null | tr -dc 'a-zA-Z0-9' | fold -w 48 | head -n 1 || echo "cave-secret-$(date +%s)")
-    cat > .env << EOF
+echo "📌 Step 4: Creating configuration..."
+JWT_SECRET=$(cat /dev/urandom 2>/dev/null | tr -dc 'a-zA-Z0-9' | fold -w 48 | head -n 1 || echo "cave-secret-$(date +%s)")
+
+cat > .env << EOF
 PORT=1920
 JWT_SECRET=$JWT_SECRET
 NODE_ENV=production
+PUBLIC_IP=$PUBLIC_IP
 EOF
-    echo "   ✅ Configuration created"
-else
-    echo "   ✅ Configuration already exists"
+echo "   ✅ Configuration created"
+
+echo ""
+echo "📌 Step 5: Setting up firewall..."
+# Open port 1920
+if command -v ufw &> /dev/null; then
+    sudo ufw allow 1920/tcp &> /dev/null
+    echo "   ✅ Firewall rule added (UFW)"
+elif command -v firewall-cmd &> /dev/null; then
+    sudo firewall-cmd --permanent --add-port=1920/tcp &> /dev/null
+    sudo firewall-cmd --reload &> /dev/null
+    echo "   ✅ Firewall rule added (FirewallD)"
+elif command -v iptables &> /dev/null; then
+    sudo iptables -I INPUT -p tcp --dport 1920 -j ACCEPT
+    echo "   ✅ Firewall rule added (iptables)"
 fi
 
 echo ""
@@ -128,17 +123,21 @@ echo "                    ✅ INSTALLATION COMPLETE!"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 echo "🚀 To start the dashboard:"
+echo "   cd $SCRIPT_DIR"
 echo "   npm start"
 echo ""
-echo "   OR run: node app.js"
+echo "📱 Access from anywhere:"
+echo "   🌐 http://$PUBLIC_IP:1920"
 echo ""
-echo "📱 Then open in your browser:"
-echo "   http://localhost:1920"
+echo "📋 Direct Links:"
+echo "   🔐 Login:     http://$PUBLIC_IP:1920/login.html"
+echo "   📊 Dashboard: http://$PUBLIC_IP:1920/dashboard.html"
+echo "   👁️  Public:    http://$PUBLIC_IP:1920/public.html"
 echo ""
 echo "🔐 Default login:"
 echo "   Username: admin"
 echo "   Password: admin123"
 echo ""
-echo "📂 Current directory: $(pwd)"
+echo "⚠️  IMPORTANT: Change the default password immediately!"
 echo ""
 echo "🏔️ The Mountain Protects! 🏔️"
